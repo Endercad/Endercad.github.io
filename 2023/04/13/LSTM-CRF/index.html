@@ -1,0 +1,180 @@
+<!DOCTYPE html><html lang="zh-CN" data-theme="light"><head><meta charset="UTF-8"><meta http-equiv="X-UA-Compatible" content="IE=edge"><meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0"><title>LSTM-CRF | 菜鸟的学习笔记</title><meta name="author" content="Endercad"><meta name="copyright" content="Endercad"><meta name="format-detection" content="telephone=no"><meta name="theme-color" content="#ffffff"><meta name="description" content="LSTM-CRF模型介绍使用LSTM，用输出的ht虽然也可以产生对每一个时间序列的标注，但是这些独立的标注（分类）当需要结果之间的标签有较强依赖性是的时候，是有局限性的。NER就是这样的一个任务。因为可解释标签序列的“语法”强加了几个硬约束（例如，I-PER 不能在 B-LOC的后面），所以这是不可能用独立假设建模的。 于是，我们使用CRF（条件随机场）对标注共同建模。 定义P为LSTM输出的分数">
+<meta property="og:type" content="article">
+<meta property="og:title" content="LSTM-CRF">
+<meta property="og:url" content="http://example.com/2023/04/13/LSTM-CRF/index.html">
+<meta property="og:site_name" content="菜鸟的学习笔记">
+<meta property="og:description" content="LSTM-CRF模型介绍使用LSTM，用输出的ht虽然也可以产生对每一个时间序列的标注，但是这些独立的标注（分类）当需要结果之间的标签有较强依赖性是的时候，是有局限性的。NER就是这样的一个任务。因为可解释标签序列的“语法”强加了几个硬约束（例如，I-PER 不能在 B-LOC的后面），所以这是不可能用独立假设建模的。 于是，我们使用CRF（条件随机场）对标注共同建模。 定义P为LSTM输出的分数">
+<meta property="og:locale" content="zh_CN">
+<meta property="og:image" content="https://i.loli.net/2021/02/24/5O1day2nriDzjSu.png">
+<meta property="article:published_time" content="2023-04-13T08:39:51.000Z">
+<meta property="article:modified_time" content="2023-04-13T07:40:29.920Z">
+<meta property="article:author" content="Endercad">
+<meta property="article:tag" content="nlp">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:image" content="https://i.loli.net/2021/02/24/5O1day2nriDzjSu.png"><link rel="shortcut icon" href="/img/favicon.png"><link rel="canonical" href="http://example.com/2023/04/13/LSTM-CRF/index.html"><link rel="preconnect" href="//cdn.jsdelivr.net"/><link rel="preconnect" href="//busuanzi.ibruce.info"/><link rel="stylesheet" href="/css/index.css"><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free/css/all.min.css" media="print" onload="this.media='all'"><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fancyapps/ui/dist/fancybox.min.css" media="print" onload="this.media='all'"><script>const GLOBAL_CONFIG = { 
+  root: '/',
+  algolia: undefined,
+  localSearch: undefined,
+  translate: undefined,
+  noticeOutdate: undefined,
+  highlight: {"plugin":"highlighjs","highlightCopy":true,"highlightLang":true,"highlightHeightLimit":false},
+  copy: {
+    success: '复制成功',
+    error: '复制错误',
+    noSupport: '浏览器不支持'
+  },
+  relativeDate: {
+    homepage: false,
+    post: false
+  },
+  runtime: '',
+  date_suffix: {
+    just: '刚刚',
+    min: '分钟前',
+    hour: '小时前',
+    day: '天前',
+    month: '个月前'
+  },
+  copyright: undefined,
+  lightbox: 'fancybox',
+  Snackbar: undefined,
+  source: {
+    justifiedGallery: {
+      js: 'https://cdn.jsdelivr.net/npm/flickr-justified-gallery/dist/fjGallery.min.js',
+      css: 'https://cdn.jsdelivr.net/npm/flickr-justified-gallery/dist/fjGallery.min.css'
+    }
+  },
+  isPhotoFigcaption: false,
+  islazyload: false,
+  isAnchor: false,
+  percent: {
+    toc: true,
+    rightside: false,
+  }
+}</script><script id="config-diff">var GLOBAL_CONFIG_SITE = {
+  title: 'LSTM-CRF',
+  isPost: true,
+  isHome: false,
+  isHighlightShrink: false,
+  isToc: true,
+  postUpdate: '2023-04-13 15:40:29'
+}</script><noscript><style type="text/css">
+  #nav {
+    opacity: 1
+  }
+  .justified-gallery img {
+    opacity: 1
+  }
+
+  #recent-posts time,
+  #post-meta time {
+    display: inline !important
+  }
+</style></noscript><script>(win=>{
+    win.saveToLocal = {
+      set: function setWithExpiry(key, value, ttl) {
+        if (ttl === 0) return
+        const now = new Date()
+        const expiryDay = ttl * 86400000
+        const item = {
+          value: value,
+          expiry: now.getTime() + expiryDay,
+        }
+        localStorage.setItem(key, JSON.stringify(item))
+      },
+
+      get: function getWithExpiry(key) {
+        const itemStr = localStorage.getItem(key)
+
+        if (!itemStr) {
+          return undefined
+        }
+        const item = JSON.parse(itemStr)
+        const now = new Date()
+
+        if (now.getTime() > item.expiry) {
+          localStorage.removeItem(key)
+          return undefined
+        }
+        return item.value
+      }
+    }
+  
+    win.getScript = url => new Promise((resolve, reject) => {
+      const script = document.createElement('script')
+      script.src = url
+      script.async = true
+      script.onerror = reject
+      script.onload = script.onreadystatechange = function() {
+        const loadState = this.readyState
+        if (loadState && loadState !== 'loaded' && loadState !== 'complete') return
+        script.onload = script.onreadystatechange = null
+        resolve()
+      }
+      document.head.appendChild(script)
+    })
+  
+    win.getCSS = url => new Promise((resolve, reject) => {
+      const link = document.createElement('link')
+      link.rel = 'stylesheet'
+      link.href = url
+      link.onload = () => resolve()
+      link.onerror = () => reject()
+      document.head.appendChild(link)
+    })
+  
+      win.activateDarkMode = function () {
+        document.documentElement.setAttribute('data-theme', 'dark')
+        if (document.querySelector('meta[name="theme-color"]') !== null) {
+          document.querySelector('meta[name="theme-color"]').setAttribute('content', '#0d0d0d')
+        }
+      }
+      win.activateLightMode = function () {
+        document.documentElement.setAttribute('data-theme', 'light')
+        if (document.querySelector('meta[name="theme-color"]') !== null) {
+          document.querySelector('meta[name="theme-color"]').setAttribute('content', '#ffffff')
+        }
+      }
+      const t = saveToLocal.get('theme')
+    
+          if (t === 'dark') activateDarkMode()
+          else if (t === 'light') activateLightMode()
+        
+      const asideStatus = saveToLocal.get('aside-status')
+      if (asideStatus !== undefined) {
+        if (asideStatus === 'hide') {
+          document.documentElement.classList.add('hide-aside')
+        } else {
+          document.documentElement.classList.remove('hide-aside')
+        }
+      }
+    
+    const detectApple = () => {
+      if(/iPad|iPhone|iPod|Macintosh/.test(navigator.userAgent)){
+        document.documentElement.classList.add('apple')
+      }
+    }
+    detectApple()
+    })(window)</script><meta name="generator" content="Hexo 6.3.0"></head><body><div id="sidebar"><div id="menu-mask"></div><div id="sidebar-menus"><div class="avatar-img is-center"><img src="https://i.loli.net/2021/02/24/5O1day2nriDzjSu.png" onerror="onerror=null;src='/img/friend_404.gif'" alt="avatar"/></div><div class="sidebar-site-data site-data is-center"><a href="/archives/"><div class="headline">文章</div><div class="length-num">7</div></a><a href="/tags/"><div class="headline">标签</div><div class="length-num">7</div></a><a href="/categories/"><div class="headline">分类</div><div class="length-num">4</div></a></div><hr/></div></div><div class="post" id="body-wrap"><header class="post-bg" id="page-header"><nav id="nav"><span id="blog-info"><a href="/" title="菜鸟的学习笔记"><span class="site-name">菜鸟的学习笔记</span></a></span><div id="menus"><div id="toggle-menu"><a class="site-page" href="javascript:void(0);"><i class="fas fa-bars fa-fw"></i></a></div></div></nav><div id="post-info"><h1 class="post-title">LSTM-CRF</h1><div id="post-meta"><div class="meta-firstline"><span class="post-meta-date"><i class="far fa-calendar-alt fa-fw post-meta-icon"></i><span class="post-meta-label">发表于</span><time class="post-meta-date-created" datetime="2023-04-13T08:39:51.000Z" title="发表于 2023-04-13 16:39:51">2023-04-13</time><span class="post-meta-separator">|</span><i class="fas fa-history fa-fw post-meta-icon"></i><span class="post-meta-label">更新于</span><time class="post-meta-date-updated" datetime="2023-04-13T07:40:29.920Z" title="更新于 2023-04-13 15:40:29">2023-04-13</time></span><span class="post-meta-categories"><span class="post-meta-separator">|</span><i class="fas fa-inbox fa-fw post-meta-icon"></i><a class="post-meta-categories" href="/categories/%E6%B7%B1%E5%BA%A6%E5%AD%A6%E4%B9%A0/">深度学习</a></span></div><div class="meta-secondline"><span class="post-meta-separator">|</span><span class="post-meta-pv-cv" id="" data-flag-title="LSTM-CRF"><i class="far fa-eye fa-fw post-meta-icon"></i><span class="post-meta-label">阅读量:</span><span id="busuanzi_value_page_pv"><i class="fa-solid fa-spinner fa-spin"></i></span></span></div></div></div></header><main class="layout" id="content-inner"><div id="post"><article class="post-content" id="article-container"><h1 id="LSTM-CRF"><a href="#LSTM-CRF" class="headerlink" title="LSTM-CRF"></a>LSTM-CRF</h1><h2 id="模型介绍"><a href="#模型介绍" class="headerlink" title="模型介绍"></a>模型介绍</h2><p>使用LSTM，用输出的ht虽然也可以产生对每一个时间序列的标注，但是这些独立的标注（分类）当需要结果之间的标签有较强依赖性是的时候，是有局限性的。NER就是这样的一个任务。因为可解释标签序列的“语法”强加了几个硬约束（例如，I-PER 不能在 B-LOC的后面），所以这是不可能用独立假设建模的。</p>
+<p>于是，我们使用CRF（条件随机场）对标注共同建模。</p>
+<p>定义P为LSTM输出的分数的矩阵，大小为n×k，其中k是标注种类的数量，Pij表示第i个词在第j个标注的分数。</p>
+<p>输入序列为X&#x3D;(x1,x2,…xn),输出序列为y&#x3D;(y1,y2,…yn)，</p>
+<p>我们定义score</p>
+<p><img src="/images/lstm-crf_1.png"></p>
+<p>其中A是转移矩阵分数，Aij表示从标注i到标注j转移的分数。y0和yn分别表示句子开始和结束的标注。因此A的大小为（k+2）×（k+2）</p>
+<p>所有可能的标签序列 的softmax产生序列y的概率：</p>
+<p><img src="/images/lstm-crf_2.png"></p>
+<p>在训练期间，我们最大化正确标签序列的对数概率：</p>
+<p><img src="/images/lstm-crf_3.png"></p>
+<h2 id="模型参数"><a href="#模型参数" class="headerlink" title="模型参数"></a>模型参数</h2><p>LSTM-CRF架构如图所示</p>
+<p><img src="/images/lstm-crf_4.png"></p>
+<p>从模型的架构可知模型的参数包括二元转移矩阵A以及产生矩阵P的参数，即LSTM层，线性层和词嵌入层。</p>
+<p>词嵌入作为BiLIST的输入，LSTM返回每个词左右上下文的表示</p>
+<p>这些表示连接为ci，并线性投射到大小为tag数量的层上。并没有使用softmax输出二十使用CRF考虑相邻的标签，从而为每个单词生成最终预测。</p>
+<p>此外，在ci和CRF层之间存在一个隐藏层，能够略微改善结果。</p>
+<h3 id="Embedding层"><a href="#Embedding层" class="headerlink" title="Embedding层"></a>Embedding层</h3><p>从有限的NER训练数据中学习词类型的独立表示是一个难题，因为涉及太多参数无法可靠的估计。由于许都语言都有正字法或形态学依据表明某个事物是否是一个名称，因此我们需要对对单词拼写的敏感表示。在论文Neural Architectures for Named Entity Recognition中，从构成单词的字符的表示中构建单词的表示。另外，在大型语料库中常规的上下文中出现的名称可能各不相同，因此使用从对词序敏感的大型语料库中学习的嵌入。最后，为了防止模型过于依赖一种或另一种表示，使用dropout训练，能够具有良好的泛化性。</p>
+<h3 id="基于字符的单词模型"><a href="#基于字符的单词模型" class="headerlink" title="基于字符的单词模型"></a>基于字符的单词模型</h3><p>与之前大多数方法的一个不同是，本文在训练时学习字符级特征，而不是手工设计有关单词的前缀后缀信息。这在学习特定任务和领域的表示比手工具有优势。可以处理词性标注和语言建模或依存关系解析等任务中词汇量不足的问题。</p>
+<p>从一个词的字符生成一个词嵌入的过程如图</p>
+<p><img src="/images/lstm-crf_5.png"></p>
+<p>随机初始化的字符查找表包含每个字符的嵌入。单词中每个字符的字符嵌入以正向和反向的顺序提供给前向和反向LSTM。从字符派生的单词的嵌入是双向LSTM的前向和反向表示的连接.然后将该字符级表示和来自单词查找表（单词查找表由与训练的词嵌入进行初始化）中的单词表示连接起来。在测试中，词查找表中没有embedding的词被映射为UNK-embedding。为了训练UNK，用概率为0.5的UNK替代单例（singleton）。在这里前向和后向字符LSTM的隐藏维度各为25，因此基于字符的单词表示维度为50</p>
+</article><div class="post-copyright"><div class="post-copyright__author"><span class="post-copyright-meta">文章作者: </span><span class="post-copyright-info"><a href="http://example.com">Endercad</a></span></div><div class="post-copyright__type"><span class="post-copyright-meta">文章链接: </span><span class="post-copyright-info"><a href="http://example.com/2023/04/13/LSTM-CRF/">http://example.com/2023/04/13/LSTM-CRF/</a></span></div><div class="post-copyright__notice"><span class="post-copyright-meta">版权声明: </span><span class="post-copyright-info">本博客所有文章除特别声明外，均采用 <a href="https://creativecommons.org/licenses/by-nc-sa/4.0/" target="_blank">CC BY-NC-SA 4.0</a> 许可协议。转载请注明来自 <a href="http://example.com" target="_blank">菜鸟的学习笔记</a>！</span></div></div><div class="tag_share"><div class="post-meta__tag-list"><a class="post-meta__tags" href="/tags/nlp/">nlp</a></div><div class="post_share"><div class="social-share" data-image="https://i.loli.net/2021/02/24/5O1day2nriDzjSu.png" data-sites="facebook,twitter,wechat,weibo,qq"></div><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/butterfly-extsrc/sharejs/dist/css/share.min.css" media="print" onload="this.media='all'"><script src="https://cdn.jsdelivr.net/npm/butterfly-extsrc/sharejs/dist/js/social-share.min.js" defer></script></div></div><nav class="pagination-post" id="pagination"><div class="next-post pull-full"><a href="/2023/04/11/el-form%E8%A1%A8%E5%8D%95%E9%AA%8C%E8%AF%81%E4%BA%8C%E9%80%89%E4%B8%80%E5%BF%85%E5%A1%AB/" title="el-form表单验证二选一必填"><div class="cover" style="background: var(--default-bg-color)"></div><div class="pagination-info"><div class="label">下一篇</div><div class="next_info">el-form表单验证二选一必填</div></div></a></div></nav></div><div class="aside-content" id="aside-content"><div class="card-widget card-info"><div class="is-center"><div class="avatar-img"><img src="https://i.loli.net/2021/02/24/5O1day2nriDzjSu.png" onerror="this.onerror=null;this.src='/img/friend_404.gif'" alt="avatar"/></div><div class="author-info__name">Endercad</div><div class="author-info__description"></div></div><div class="card-info-data site-data is-center"><a href="/archives/"><div class="headline">文章</div><div class="length-num">7</div></a><a href="/tags/"><div class="headline">标签</div><div class="length-num">7</div></a><a href="/categories/"><div class="headline">分类</div><div class="length-num">4</div></a></div><a id="card-info-btn" target="_blank" rel="noopener" href="https://github.com/endercad"><i class="fab fa-github"></i><span>Follow Me</span></a></div><div class="card-widget card-announcement"><div class="item-headline"><i class="fas fa-bullhorn fa-shake"></i><span>公告</span></div><div class="announcement_content">要比昨天的自己更好</div></div><div class="sticky_layout"><div class="card-widget" id="card-toc"><div class="item-headline"><i class="fas fa-stream"></i><span>目录</span><span class="toc-percentage"></span></div><div class="toc-content"><ol class="toc"><li class="toc-item toc-level-1"><a class="toc-link" href="#LSTM-CRF"><span class="toc-number">1.</span> <span class="toc-text">LSTM-CRF</span></a><ol class="toc-child"><li class="toc-item toc-level-2"><a class="toc-link" href="#%E6%A8%A1%E5%9E%8B%E4%BB%8B%E7%BB%8D"><span class="toc-number">1.1.</span> <span class="toc-text">模型介绍</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#%E6%A8%A1%E5%9E%8B%E5%8F%82%E6%95%B0"><span class="toc-number">1.2.</span> <span class="toc-text">模型参数</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#Embedding%E5%B1%82"><span class="toc-number">1.2.1.</span> <span class="toc-text">Embedding层</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#%E5%9F%BA%E4%BA%8E%E5%AD%97%E7%AC%A6%E7%9A%84%E5%8D%95%E8%AF%8D%E6%A8%A1%E5%9E%8B"><span class="toc-number">1.2.2.</span> <span class="toc-text">基于字符的单词模型</span></a></li></ol></li></ol></li></ol></div></div><div class="card-widget card-recent-post"><div class="item-headline"><i class="fas fa-history"></i><span>最新文章</span></div><div class="aside-list"><div class="aside-list-item no-cover"><div class="content"><a class="title" href="/2023/04/13/LSTM-CRF/" title="LSTM-CRF">LSTM-CRF</a><time datetime="2023-04-13T08:39:51.000Z" title="发表于 2023-04-13 16:39:51">2023-04-13</time></div></div><div class="aside-list-item no-cover"><div class="content"><a class="title" href="/2023/04/11/el-form%E8%A1%A8%E5%8D%95%E9%AA%8C%E8%AF%81%E4%BA%8C%E9%80%89%E4%B8%80%E5%BF%85%E5%A1%AB/" title="el-form表单验证二选一必填">el-form表单验证二选一必填</a><time datetime="2023-04-11T12:06:28.000Z" title="发表于 2023-04-11 20:06:28">2023-04-11</time></div></div><div class="aside-list-item no-cover"><div class="content"><a class="title" href="/2023/04/07/effective-python/" title="effective-python">effective-python</a><time datetime="2023-04-07T02:21:34.000Z" title="发表于 2023-04-07 10:21:34">2023-04-07</time></div></div><div class="aside-list-item no-cover"><div class="content"><a class="title" href="/2023/03/11/matplotlib%E5%AD%A6%E4%B9%A0/" title="matplotlib学习">matplotlib学习</a><time datetime="2023-03-11T07:26:46.000Z" title="发表于 2023-03-11 15:26:46">2023-03-11</time></div></div><div class="aside-list-item no-cover"><div class="content"><a class="title" href="/2023/03/09/Numpy%E5%AD%A6%E4%B9%A0/" title="Numpy学习">Numpy学习</a><time datetime="2023-03-09T06:25:13.000Z" title="发表于 2023-03-09 14:25:13">2023-03-09</time></div></div></div></div></div></div></main><footer id="footer"><div id="footer-wrap"><div class="copyright">&copy;2020 - 2023 By Endercad</div><div class="framework-info"><span>框架 </span><a target="_blank" rel="noopener" href="https://hexo.io">Hexo</a><span class="footer-separator">|</span><span>主题 </span><a target="_blank" rel="noopener" href="https://github.com/jerryc127/hexo-theme-butterfly">Butterfly</a></div></div></footer></div><div id="rightside"><div id="rightside-config-hide"><button id="readmode" type="button" title="阅读模式"><i class="fas fa-book-open"></i></button><button id="darkmode" type="button" title="浅色和深色模式转换"><i class="fas fa-adjust"></i></button><button id="hide-aside-btn" type="button" title="单栏和双栏切换"><i class="fas fa-arrows-alt-h"></i></button></div><div id="rightside-config-show"><button id="rightside_config" type="button" title="设置"><i class="fas fa-cog fa-spin"></i></button><button class="close" id="mobile-toc-button" type="button" title="目录"><i class="fas fa-list-ul"></i></button><button id="go-up" type="button" title="回到顶部"><span class="scroll-percent"></span><i class="fas fa-arrow-up"></i></button></div></div><div><script src="/js/utils.js"></script><script src="/js/main.js"></script><script src="https://cdn.jsdelivr.net/npm/@fancyapps/ui/dist/fancybox.umd.min.js"></script><div class="js-pjax"></div><script async data-pjax src="//busuanzi.ibruce.info/busuanzi/2.3/busuanzi.pure.mini.js"></script></div></body></html>
